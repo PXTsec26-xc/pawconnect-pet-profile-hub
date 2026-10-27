@@ -19,6 +19,7 @@ dist/
 *.db-wal
 pawconnect_data.json
 pawconnect_data.json.tmp
+*.backup.json
 
 # Logs
 npm-debug.log*
