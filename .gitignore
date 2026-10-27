@@ -17,6 +17,7 @@ dist/
 *.db
 *.db-journal
 *.db-wal
+pawconnect_data.json
 pawconnect_data.json.tmp
 
 # Logs
