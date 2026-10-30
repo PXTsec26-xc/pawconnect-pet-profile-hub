@@ -38,6 +38,7 @@ export function App() {
           <Route path="/register" component={Register} />
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/admin" component={AdminDashboard} />
+          <Route path="/admin/:tab" component={AdminDashboard} />
           <Route component={NotFound} />
         </Switch>
       </main>

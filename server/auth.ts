@@ -1,8 +1,22 @@
+import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { db, User } from './db.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'pawconnect_super_secret_jwt_key_2026';
+// Secure JWT Secret resolution:
+// In production, JWT_SECRET MUST be provided via environment variables.
+// In development, an ephemeral 256-bit key is generated at runtime if not provided, avoiding any committed secrets.
+const getJwtSecret = (): string => {
+  if (process.env.JWT_SECRET) {
+    return process.env.JWT_SECRET;
+  }
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('SECURITY CRITICAL: JWT_SECRET environment variable is required in production.');
+  }
+  return crypto.randomBytes(32).toString('hex');
+};
+
+const JWT_SECRET = getJwtSecret();
 
 export interface AuthenticatedRequest extends Request {
   user?: User;

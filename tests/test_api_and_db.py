@@ -155,8 +155,8 @@ def run_tests():
     # 10. Admin Authentication & Actions
     print("\n[Test 10] Admin Authentication & Authorization...")
     status, admin_login = request("POST", "/api/users/login", {
-        "email": "admin@pawconnect.org",
-        "password": "admin123"
+        "email": os.environ.get("ADMIN_INITIAL_EMAIL", "admin@pawconnect.org"),
+        "password": os.environ.get("ADMIN_INITIAL_PASSWORD", "")
     })
     assert status == 200 and admin_login["user"]["role"] == "admin", "Admin login failed"
     admin_token = admin_login["token"]
@@ -192,8 +192,42 @@ def run_tests():
     assert status == 403, f"Non-admin should be forbidden: {status}"
     print(f"  ✓ Non-admin properly blocked from admin route (HTTP 403)")
 
+    # 11. Admin User Management & Password Privacy
+    print("\n[Test 11] Admin User Management & Privacy Check...")
+    status, users_res = request("GET", "/api/users", token=admin_token)
+    assert status == 200 and "users" in users_res, f"Admin users list failed: {users_res}"
+    for u in users_res["users"]:
+        assert "password" not in u, "CRITICAL SECURITY FLAW: Password exposed in users endpoint!"
+    print(f"  ✓ Admin retrieved {len(users_res['users'])} users (verified 0 password exposures)")
+
+    # Admin updates a user's status
+    status, user_patch = request("PATCH", f"/api/users/{user_id}", {"status": "active"}, token=admin_token)
+    assert status == 200 and user_patch["user"]["status"] == "active", f"User patch failed: {user_patch}"
+    print(f"  ✓ Admin successfully managed user #{user_id} status")
+
+    # 12. Admin Rescue Dispatch Management
+    print("\n[Test 12] Admin Rescue Dispatch Updates...")
+    status, rescue_patch = request("PATCH", f"/api/rescue/{rescue_id}", {"status": "in_progress"}, token=admin_token)
+    assert status == 200 and rescue_patch["report"]["status"] == "in_progress", f"Rescue patch failed: {rescue_patch}"
+    print(f"  ✓ Admin advanced rescue #{rescue_id} status to 'in_progress'")
+
+    # 13. Admin Contact Messages
+    print("\n[Test 13] Admin Contact Inquiries...")
+    status, contacts_res = request("GET", "/api/contact", token=admin_token)
+    assert status == 200 and "messages" in contacts_res, f"Contact get failed: {contacts_res}"
+    assert any(m["id"] == contact_res["id"] for m in contacts_res["messages"]), "Contact not found"
+    print(f"  ✓ Admin viewed {len(contacts_res['messages'])} contact inquiries")
+
+    # 14. Non-Admin RBAC Protection
+    print("\n[Test 14] Strict Non-Admin RBAC Enforcement...")
+    status, _ = request("GET", "/api/users", token=user_token)
+    assert status == 403, f"Users route should block regular users: {status}"
+    status, _ = request("GET", "/api/contact", token=user_token)
+    assert status == 403, f"Contact route should block regular users: {status}"
+    print(f"  ✓ All new admin endpoints strictly blocked non-admin users (HTTP 403)")
+
     print("\n==================================================")
-    print("🎉 ALL 10 INTEGRATION TESTS PASSED PERFECTLY!")
+    print("🎉 ALL 14 INTEGRATION & ADMIN TESTS PASSED PERFECTLY!")
     print("==================================================")
 
 if __name__ == "__main__":

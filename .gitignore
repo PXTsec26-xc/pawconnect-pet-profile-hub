@@ -36,3 +36,6 @@ Thumbs.db
 # Inspection & screenshot cache
 inspect_ref/
 tests/screenshots/
+
+.vercel
+.env*

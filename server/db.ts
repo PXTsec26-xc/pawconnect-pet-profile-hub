@@ -12,6 +12,7 @@ export interface User {
   fullName: string;
   phone?: string | null;
   role: 'user' | 'admin';
+  status?: 'active' | 'suspended';
   createdAt: string;
 }
 
@@ -134,7 +135,10 @@ export interface DatabaseSchema {
 }
 
 // Persistent Storage Engine
-const dataFilePath = path.resolve(process.cwd(), 'pawconnect_data.json');
+const isVercel = Boolean(process.env.VERCEL);
+const localDataFile = path.resolve(process.cwd(), 'pawconnect_data.json');
+const vercelDataFile = path.resolve('/tmp', 'pawconnect_data.json');
+const dataFilePath = isVercel ? vercelDataFile : localDataFile;
 
 // Supabase configuration
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -152,12 +156,18 @@ class DatabaseStore {
 
   private loadData(): DatabaseSchema {
     try {
+      if (isVercel && !fs.existsSync(vercelDataFile) && fs.existsSync(localDataFile)) {
+        try {
+          fs.copyFileSync(localDataFile, vercelDataFile);
+        } catch {}
+      }
+
       if (fs.existsSync(dataFilePath)) {
         const raw = fs.readFileSync(dataFilePath, 'utf-8');
         return JSON.parse(raw);
       }
     } catch (err) {
-      console.error('Error reading pawconnect_data.json, initializing fresh store:', err);
+      console.error('Error reading database file, initializing fresh store:', err);
     }
     const empty: DatabaseSchema = {
       users: [],
@@ -206,11 +216,29 @@ class DatabaseStore {
     const newUser: User = {
       ...user,
       id,
+      status: user.status || 'active',
       createdAt: new Date().toISOString(),
     };
     this.data.users.push(newUser);
     this.flush();
     return newUser;
+  }
+
+  updateUser(id: number, updates: Partial<User>): User | undefined {
+    const user = this.data.users.find(u => u.id === id);
+    if (!user) return undefined;
+    const { password, id: _id, ...safeUpdates } = updates;
+    Object.assign(user, safeUpdates);
+    this.flush();
+    return user;
+  }
+
+  deleteUser(id: number): boolean {
+    const idx = this.data.users.findIndex(u => u.id === id);
+    if (idx === -1) return false;
+    this.data.users.splice(idx, 1);
+    this.flush();
+    return true;
   }
 
   // --- SHELTERS ---
@@ -388,6 +416,22 @@ class DatabaseStore {
     return newReport;
   }
 
+  updateRescueReportStatus(id: number, status: 'reported' | 'in_progress' | 'resolved'): RescueReport | undefined {
+    const report = this.data.rescues.find(r => r.id === id);
+    if (!report) return undefined;
+    report.status = status;
+    this.flush();
+    return report;
+  }
+
+  deleteRescueReport(id: number): boolean {
+    const idx = this.data.rescues.findIndex(r => r.id === id);
+    if (idx === -1) return false;
+    this.data.rescues.splice(idx, 1);
+    this.flush();
+    return true;
+  }
+
   // --- BLOG ---
   getBlogPosts(page = 1, limit = 10): { posts: BlogPost[]; total: number; page: number; pages: number } {
     const start = (page - 1) * limit;
@@ -445,6 +489,10 @@ class DatabaseStore {
   }
 
   // --- CONTACTS ---
+  getContacts(): ContactMessage[] {
+    return this.data.contacts;
+  }
+
   createContact(message: Omit<ContactMessage, 'id' | 'createdAt'>): ContactMessage {
     const id = this.data.contacts.length ? Math.max(...this.data.contacts.map(c => c.id)) + 1 : 1;
     const newMsg: ContactMessage = {
@@ -455,6 +503,14 @@ class DatabaseStore {
     this.data.contacts.push(newMsg);
     this.flush();
     return newMsg;
+  }
+
+  deleteContact(id: number): boolean {
+    const idx = this.data.contacts.findIndex(c => c.id === id);
+    if (idx === -1) return false;
+    this.data.contacts.splice(idx, 1);
+    this.flush();
+    return true;
   }
 
   // Seed method

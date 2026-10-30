@@ -84,6 +84,10 @@ apiRouter.post('/users/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
+    if (user.status === 'suspended') {
+      return res.status(403).json({ message: 'Your account has been suspended by an administrator.' });
+    }
+
     const token = generateToken(user);
     res.cookie('token', token, {
       httpOnly: true,
@@ -118,6 +122,54 @@ apiRouter.get('/users/me', (req, res) => {
   }
   const { password, ...safeUser } = user;
   res.json(safeUser);
+});
+
+// Admin User Management
+apiRouter.get('/users', requireAdmin, (req, res) => {
+  const users = db.getUsers().map(({ password, ...safeUser }) => ({
+    ...safeUser,
+    status: safeUser.status || 'active',
+  }));
+  res.json({ users });
+});
+
+apiRouter.patch('/users/:id', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const currentAdmin = (req as AuthenticatedRequest).user!;
+  const targetUser = db.getUserById(id);
+  if (!targetUser) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+
+  // Prevent self-demotion or self-suspension
+  if (id === currentAdmin.id) {
+    if (req.body.role && req.body.role !== 'admin') {
+      return res.status(400).json({ message: 'You cannot remove your own administrator role' });
+    }
+    if (req.body.status && req.body.status === 'suspended') {
+      return res.status(400).json({ message: 'You cannot suspend your own account' });
+    }
+  }
+
+  const updated = db.updateUser(id, req.body);
+  if (!updated) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+  const { password, ...safeUser } = updated;
+  res.json({ user: safeUser });
+});
+
+apiRouter.delete('/users/:id', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const currentAdmin = (req as AuthenticatedRequest).user!;
+  if (id === currentAdmin.id) {
+    return res.status(400).json({ message: 'You cannot delete your own administrator account' });
+  }
+  const success = db.deleteUser(id);
+  if (!success) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+  res.json({ message: 'User deleted successfully' });
 });
 
 // ==============================================================================
@@ -410,6 +462,28 @@ apiRouter.post('/rescue', (req, res) => {
   }
 });
 
+apiRouter.patch('/rescue/:id', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const { status } = req.body;
+  if (!['reported', 'in_progress', 'resolved'].includes(status)) {
+    return res.status(400).json({ message: 'Invalid status' });
+  }
+  const updated = db.updateRescueReportStatus(id, status);
+  if (!updated) {
+    return res.status(404).json({ message: 'Rescue report not found' });
+  }
+  res.json({ report: updated });
+});
+
+apiRouter.delete('/rescue/:id', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const success = db.deleteRescueReport(id);
+  if (!success) {
+    return res.status(404).json({ message: 'Rescue report not found' });
+  }
+  res.json({ message: 'Rescue report deleted successfully' });
+});
+
 // ==============================================================================
 // 9. FAVORITES ENDPOINTS
 // ==============================================================================
@@ -470,4 +544,18 @@ apiRouter.post('/contact', (req, res) => {
     }
     res.status(500).json({ message: 'Failed to send message' });
   }
+});
+
+apiRouter.get('/contact', requireAdmin, (req, res) => {
+  const messages = db.getContacts();
+  res.json({ messages });
+});
+
+apiRouter.delete('/contact/:id', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const success = db.deleteContact(id);
+  if (!success) {
+    return res.status(404).json({ message: 'Contact message not found' });
+  }
+  res.json({ message: 'Contact message deleted successfully' });
 });

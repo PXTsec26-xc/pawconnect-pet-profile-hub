@@ -55,9 +55,9 @@ Populate the database with authentic reference pets, shelters, categories, and i
 ```bash
 npm run seed
 ```
-Default accounts created:
-- **Admin**: `admin@pawconnect.org` / `admin123`
-- **Demo User**: `user@pawconnect.org` / `password123`
+Initial admin and demo accounts are configured via `.env` variables:
+- `ADMIN_INITIAL_EMAIL` & `ADMIN_INITIAL_PASSWORD`
+- `USER_INITIAL_EMAIL` & `USER_INITIAL_PASSWORD`
 
 ### 4. Running the Development Server
 Run frontend (Vite on port 3000) and backend (Express on port 5000) concurrently:
